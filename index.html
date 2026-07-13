@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Fall Line — Slope Trainer</title>
+<style>
+  :root{
+    --turf:#0E2B1C;
+    --turf-2:#143824;
+    --turf-3:#1B4A30;
+    --chalk:#F2EFE4;
+    --chalk-dim:rgba(242,239,228,.55);
+    --line:rgba(242,239,228,.14);
+    --flag:#FF5A36;
+    --ok:#9BE28A;
+    --mono:"SF Mono",ui-monospace,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--turf);
+    color:var(--chalk);
+    font-family:var(--sans);
+    overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;
+  }
+  #app{max-width:480px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 0}
+
+  /* header */
+  header{display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+  header h1 em{font-style:normal;color:var(--flag)}
+  #sensorTag{font-family:var(--mono);font-size:11px;color:var(--chalk-dim);letter-spacing:.06em}
+  #sensorTag.live{color:var(--ok)}
+
+  main{flex:1;overflow-y:auto;padding:18px;padding-bottom:96px}
+
+  /* tab bar */
+  nav{position:fixed;bottom:0;left:0;right:0;display:flex;max-width:480px;margin:0 auto;
+      background:rgba(14,43,28,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+      border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;background:none;border:none;color:var(--chalk-dim);font-family:var(--sans);
+      font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:16px 0 14px;cursor:pointer}
+  nav button.on{color:var(--chalk);box-shadow:inset 0 2px 0 var(--flag)}
+
+  .tab{display:none}
+  .tab.on{display:block}
+
+  /* instrument dial */
+  .dial-wrap{display:flex;justify-content:center;margin:10px 0 18px}
+  .dial{position:relative;width:min(78vw,300px);height:min(78vw,300px)}
+  .dial svg{width:100%;height:100%;display:block}
+  .dial-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .dial-center .pct{font-family:var(--mono);font-size:56px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+  .dial-center .pct small{font-size:22px;color:var(--chalk-dim)}
+  .dial-center .sub{margin-top:6px;font-family:var(--mono);font-size:12px;color:var(--chalk-dim);letter-spacing:.08em}
+  #bubble{transition:cx .12s linear,cy .12s linear}
+  #fallArrow{transition:transform .15s linear;transform-origin:150px 150px}
+
+  /* buttons */
+  .btn{display:block;width:100%;border:none;border-radius:12px;padding:18px;
+      font-family:var(--sans);font-size:16px;font-weight:700;letter-spacing:.04em;cursor:pointer}
+  .btn-flag{background:var(--flag);color:#1a0d08}
+  .btn-ghost{background:var(--turf-2);color:var(--chalk);border:1px solid var(--line)}
+  .btn:active{transform:scale(.98)}
+  .btn[disabled]{opacity:.4}
+  .row{display:flex;gap:10px}
+  .row .btn{flex:1}
+
+  .card{background:var(--turf-2);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--chalk-dim);margin-bottom:10px}
+
+  /* guess stepper */
+  .guess-big{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 16px}
+  .guess-big button{width:64px;height:64px;border-radius:50%;border:1px solid var(--line);background:var(--turf-3);
+      color:var(--chalk);font-size:30px;font-weight:400;cursor:pointer;line-height:1}
+  .guess-big button:active{background:var(--turf)}
+  .guess-val{font-family:var(--mono);font-size:52px;font-weight:600;font-variant-numeric:tabular-nums;min-width:150px;text-align:center}
+  .guess-val small{font-size:20px;color:var(--chalk-dim)}
+  .chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .chips button{border:1px solid var(--line);background:none;color:var(--chalk-dim);border-radius:999px;
+      padding:10px 16px;font-family:var(--mono);font-size:14px;cursor:pointer}
+  .chips button.on{border-color:var(--flag);color:var(--chalk)}
+
+  /* capture progress */
+  .cap-ring{display:flex;justify-content:center;margin:6px 0 14px}
+  .steady{font-family:var(--mono);font-size:13px;text-align:center;color:var(--chalk-dim);min-height:18px;margin-bottom:10px}
+
+  /* result */
+  .result-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .result-cell{background:var(--turf-3);border-radius:12px;padding:14px;text-align:center}
+  .result-cell .lab{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--chalk-dim);margin-bottom:6px}
+  .result-cell .num{font-family:var(--mono);font-size:34px;font-weight:600;font-variant-numeric:tabular-nums}
+  .verdict{text-align:center;font-size:15px;margin-bottom:16px;line-height:1.5}
+  .verdict b{font-family:var(--mono)}
+  .err-pos{color:var(--flag)}
+  .err-neg{color:#6FB7FF}
+  .err-zero{color:var(--ok)}
+
+  /* stats */
+  .stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+  .stat{background:var(--turf-2);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+  .stat .num{font-family:var(--mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+  .stat .lab{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chalk-dim);margin-top:4px}
+  .hist-item{display:flex;justify-content:space-between;align-items:center;padding:12px 2px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:14px}
+  .hist-item .when{color:var(--chalk-dim);font-size:11px}
+  #errBars{display:flex;align-items:flex-end;gap:3px;height:64px;margin:6px 0 4px}
+  #errBars .bar{flex:1;background:var(--turf-3);border-radius:3px 3px 0 0;min-height:3px}
+  #errBars .bar.hot{background:var(--flag)}
+  .bar-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--chalk-dim)}
+
+  .note{font-size:13px;color:var(--chalk-dim);line-height:1.55}
+  .note b{color:var(--chalk)}
+
+  /* enable overlay */
+  #gate{position:fixed;inset:0;background:var(--turf);display:flex;flex-direction:column;align-items:center;
+      justify-content:center;padding:32px;z-index:50;text-align:center}
+  #gate h2{font-size:22px;margin-bottom:10px;letter-spacing:.02em}
+  #gate p{color:var(--chalk-dim);font-size:14px;line-height:1.6;margin-bottom:26px;max-width:300px}
+  #gate .btn{max-width:280px}
+  #gate .demo-link{margin-top:18px;background:none;border:none;color:var(--chalk-dim);font-size:13px;text-decoration:underline;cursor:pointer}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="gate">
+    <h2>Fall <em style="color:var(--flag);font-style:normal">Line</em></h2>
+    <p>Slope trainer for green reading. This app needs motion sensor access to measure slope — tap below and allow when prompted.</p>
+    <button class="btn btn-flag" id="enableBtn">Enable motion sensors</button>
+    <button class="demo-link" id="demoBtn">Sensors not available? Run demo mode</button>
+  </div>
+
+  <header>
+    <h1>Fall <em>Line</em></h1>
+    <span id="sensorTag">sensors off</span>
+  </header>
+
+  <main>
+
+    <!-- PRACTICE TAB -->
+    <section class="tab on" id="tab-practice">
+
+      <div id="p-step1">
+        <div class="card">
+          <div class="eyebrow">Step 1 · Feel it</div>
+          <p class="note" style="margin-bottom:4px">Straddle the line or stand on the spot. Phone stays in your pocket. What slope do your feet say?</p>
+        </div>
+        <div class="guess-big">
+          <button id="gMinus">−</button>
+          <div class="guess-val"><span id="gVal">2.0</span><small>%</small></div>
+          <button id="gPlus">+</button>
+        </div>
+        <div class="chips" id="gChips">
+          <button data-v="0.5">0.5</button><button data-v="1">1.0</button><button data-v="1.5">1.5</button>
+          <button data-v="2" class="on">2.0</button><button data-v="2.5">2.5</button><button data-v="3">3.0</button><button data-v="4">4.0</button>
+        </div>
+        <div style="height:18px"></div>
+        <button class="btn btn-flag" id="lockGuess">Lock in guess</button>
+      </div>
+
+      <div id="p-step2" class="hidden">
+        <div class="card">
+          <div class="eyebrow">Step 2 · Measure</div>
+          <p class="note">Guess locked: <b id="lockedShow"></b>. Now lay the phone <b>flat on the green, screen up</b>, right on the spot you read. Keep hands off during capture.</p>
+        </div>
+        <div class="cap-ring">
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="6"/>
+            <circle id="pCapArc" cx="60" cy="60" r="52" fill="none" stroke="var(--flag)" stroke-width="6"
+              stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7" transform="rotate(-90 60 60)"/>
+            <text id="pCapPct" x="60" y="70" text-anchor="middle" fill="var(--chalk)" font-family="var(--mono)" font-size="26" font-weight="600">—</text>
+          </svg>
+        </div>
+        <div class="steady" id="pSteady">place the phone, then start</div>
+        <button class="btn btn-flag" id="pCapture">Start 2-second capture</button>
+        <div style="height:10px"></div>
+        <button class="btn btn-ghost" id="pBack">Back to guess</button>
+      </div>
+
+      <div id="p-step3" class="hidden">
+        <div class="card"><div class="eyebrow">Step 3 · Result</div>
+          <div class="result-grid">
+            <div class="result-cell"><div class="lab">Your feet</div><div class="num" id="rGuess">—</div></div>
+            <div class="result-cell"><div class="lab">Measured</div><div class="num" id="rActual">—</div></div>
+          </div>
+          <div class="verdict" id="rVerdict"></div>
+        </div>
+        <button class="btn btn-flag" id="pNext">Next spot</button>
+      </div>
+
+    </section>
+
+    <!-- LEVEL TAB -->
+    <section class="tab" id="tab-level">
+      <div class="dial-wrap">
+        <div class="dial">
+          <svg viewBox="0 0 300 300">
+            <circle cx="150" cy="150" r="146" fill="var(--turf-2)" stroke="var(--line)"/>
+            <g id="ticks" stroke="rgba(242,239,228,.28)"></g>
+            <circle cx="150" cy="150" r="104" fill="none" stroke="var(--line)"/>
+            <circle cx="150" cy="150" r="52" fill="none" stroke="var(--line)" stroke-dasharray="3 5"/>
+            <g id="fallArrow" opacity="0.95">
+              <path d="M150 258 L138 236 L147 236 L147 210 L153 210 L153 236 L162 236 Z" fill="var(--flag)"/>
+            </g>
+            <circle id="bubble" cx="150" cy="150" r="13" fill="none" stroke="var(--chalk)" stroke-width="2.5"/>
+            <circle cx="150" cy="150" r="2.5" fill="var(--chalk-dim)"/>
+          </svg>
+          <div class="dial-center">
+            <div class="pct"><span id="livePct">0.0</span><small>%</small></div>
+            <div class="sub" id="liveDeg">0.0° · fall line ↓</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn btn-flag" id="lCapture">Capture</button>
+        <button class="btn btn-ghost" id="lPrecision">Precision ↻180°</button>
+      </div>
+      <div class="steady" id="lMsg" style="margin-top:12px"></div>
+
+      <div class="card" style="margin-top:6px">
+        <div class="eyebrow">Calibration</div>
+        <p class="note" style="margin-bottom:12px">Zero on a surface you trust to be flat (counter, table — not carpet). Offset: <b id="calShow">none</b></p>
+        <div class="row">
+          <button class="btn btn-ghost" id="calZero">Set zero here</button>
+          <button class="btn btn-ghost" id="calClear">Clear</button>
+        </div>
+      </div>
+      <p class="note">Precision mode captures twice — you rotate the phone 180° between reads — and averages out sensor bias. Use it when a tenth of a percent matters.</p>
+    </section>
+
+    <!-- STATS TAB -->
+    <section class="tab" id="tab-stats">
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="sCount">0</div><div class="lab">Reads</div></div>
+        <div class="stat"><div class="num" id="sMae">—</div><div class="lab">Avg miss</div></div>
+        <div class="stat"><div class="num" id="sBias">—</div><div class="lab">Bias</div></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Error distribution · guess − actual</div>
+        <div id="errBars"></div>
+        <div class="bar-labels"><span>−1.5%</span><span>0</span><span>+1.5%</span></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Recent reads</div>
+        <div id="histList"><p class="note">No reads yet. Run the practice loop and they'll land here.</p></div>
+      </div>
+      <button class="btn btn-ghost" id="clearData">Clear all data</button>
+    </section>
+
+  </main>
+
+  <nav>
+    <button data-tab="practice" class="on">Practice</button>
+    <button data-tab="level">Level</button>
+    <button data-tab="stats">Stats</button>
+  </nav>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const RAD = Math.PI/180;
+
+  /* ---------- storage: window.storage → localStorage → memory ---------- */
+  const mem = {};
+  const store = {
+    async get(k){
+      try{ if(window.storage){ const r = await window.storage.get(k); return r ? r.value : null; } }catch(e){}
+      try{ if(window.localStorage) return localStorage.getItem(k); }catch(e){}
+      return mem[k] ?? null;
+    },
+    async set(k,v){
+      try{ if(window.storage){ await window.storage.set(k,v); return; } }catch(e){}
+      try{ if(window.localStorage){ localStorage.setItem(k,v); return; } }catch(e){}
+      mem[k]=v;
+    },
+    async del(k){
+      try{ if(window.storage){ await window.storage.delete(k); return; } }catch(e){}
+      try{ if(window.localStorage){ localStorage.removeItem(k); return; } }catch(e){}
+      delete mem[k];
+    }
+  };
+
+  /* ---------- sensor state ---------- */
+  let beta = 0, gamma = 0;        // raw degrees
+  let cal = null;                  // {b,g} offset
+  let sensorsOn = false, demo = false;
+  let demoSlope = 0, demoDir = 0;
+
+  function reading(){
+    let b = beta, g = gamma;
+    if (cal){ b -= cal.b; g -= cal.g; }
+    const br = b*RAD, gr = g*RAD;
+    // gravity in device frame (alpha ignored): x=sinγcosβ, y=−sinβ, z=−cosβcosγ
+    const gx = Math.sin(gr)*Math.cos(br);
+    const gy = -Math.sin(br);
+    const inPlane = Math.hypot(gx, gy);
+    const vert = Math.abs(Math.cos(br)*Math.cos(gr));
+    const slopePct = vert > 1e-6 ? (inPlane/vert)*100 : 0;
+    const tiltDeg = Math.atan2(inPlane, vert)/RAD;
+    // arrow angle: 0 = downhill toward top of phone; CSS clockwise
+    const arrowDeg = Math.atan2(gx, gy)/RAD;
+    return { slopePct, tiltDeg, arrowDeg, b, g };
+  }
+
+  function onOrient(e){
+    if (e.beta == null) return;
+    beta = e.beta; gamma = e.gamma;
+    sensorsOn = true;
+  }
+
+  function demoTick(){
+    // wander a fake slope so the flow is testable without sensors
+    demoSlope += (Math.random()-.5)*.06;
+    demoSlope = Math.min(4.2, Math.max(0.2, demoSlope || 2.1));
+    demoDir += (Math.random()-.5)*2;
+    const t = Math.atan(demoSlope/100);
+    beta = -Math.cos(demoDir*RAD)*t/RAD;
+    gamma = Math.sin(demoDir*RAD)*t/RAD;
+    sensorsOn = true;
+  }
+
+  async function enableSensors(){
+    try{
+      if (typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function"){
+        const res = await DeviceOrientationEvent.requestPermission();
+        if (res !== "granted"){ gateFail("Permission denied. You can retry, or use demo mode."); return; }
+      }
+      window.addEventListener("deviceorientation", onOrient, true);
+      // verify data actually flows (iframes can silently block)
+      setTimeout(() => {
+        if (!sensorsOn){
+          gateFail("No sensor data received. If you're viewing this inside a chat preview, motion may be blocked — save the file and open it directly in Safari (or self-host it), or use demo mode.");
+        } else closeGate();
+      }, 1200);
+      $("sensorTag").textContent = "connecting…";
+    }catch(err){
+      gateFail("Sensor error: " + err.message);
+    }
+  }
+
+  function gateFail(msg){
+    const p = document.querySelector("#gate p");
+    p.textContent = msg;
+  }
+  function closeGate(){
+    $("gate").classList.add("hidden");
+    $("sensorTag").textContent = demo ? "demo mode" : "sensors live";
+    $("sensorTag").classList.add("live");
+  }
+
+  $("enableBtn").addEventListener("click", enableSensors);
+  $("demoBtn").addEventListener("click", () => {
+    demo = true;
+    setInterval(demoTick, 120);
+    closeGate();
+  });
+
+  /* ---------- tabs ---------- */
+  document.querySelectorAll("nav button").forEach(b => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x===b));
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.id === "tab-"+b.dataset.tab));
+      if (b.dataset.tab === "stats") renderStats();
+    });
+  });
+
+  /* ---------- dial ticks ---------- */
+  (function ticks(){
+    const g = $("ticks");
+    let html = "";
+    for (let i=0;i<72;i++){
+      const a = i*5*RAD, major = i%18===0;
+      const r1 = major?128:136, r2 = 146;
+      html += `<line x1="${150+r1*Math.sin(a)}" y1="${150-r1*Math.cos(a)}" x2="${150+r2*Math.sin(a)}" y2="${150-r2*Math.cos(a)}" stroke-width="${major?2:1}"/>`;
+    }
+    g.innerHTML = html;
+  })();
+
+  /* ---------- live dial loop ---------- */
+  function tickUI(){
+    if (sensorsOn){
+      const r = reading();
+      $("livePct").textContent = r.slopePct.toFixed(1);
+      $("liveDeg").textContent = r.tiltDeg.toFixed(1) + "° · fall line ↓";
+      $("fallArrow").style.transform = `rotate(${r.arrowDeg}deg)`;
+      // bubble drifts uphill (opposite the fall line), like a real level
+      const mag = Math.min(1, r.slopePct/4) * 90;
+      const a = (r.arrowDeg+180)*RAD;
+      $("bubble").setAttribute("cx", 150 + mag*Math.sin(a));
+      $("bubble").setAttribute("cy", 150 - mag*Math.cos(a));
+    }
+    requestAnimationFrame(tickUI);
+  }
+  requestAnimationFrame(tickUI);
+
+  /* ---------- capture (2s average) ---------- */
+  function capture(onProgress){
+    return new Promise(resolve => {
+      const samples = [];
+      const t0 = performance.now(), DUR = 2000;
+      (function loop(){
+        const r = reading();
+        samples.push(r);
+        const p = Math.min(1,(performance.now()-t0)/DUR);
+        onProgress && onProgress(p, r);
+        if (p < 1) requestAnimationFrame(loop);
+        else {
+          const n = samples.length;
+          const avg = k => samples.reduce((s,x)=>s+x[k],0)/n;
+          const slope = avg("slopePct");
+          const sd = Math.sqrt(samples.reduce((s,x)=>s+(x.slopePct-slope)**2,0)/n);
+          resolve({ slopePct: slope, tiltDeg: avg("tiltDeg"), arrowDeg: avg("arrowDeg"), sd, b: avg("b"), g: avg("g") });
+        }
+      })();
+    });
+  }
+
+  const vib = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} };
+
+  /* ---------- practice flow ---------- */
+  let guess = 2.0, lockedGuess = null;
+  const fmtG = v => (Math.round(v*100)/100).toFixed(v*4 % 2 !== 0 ? 2 : 1);
+
+  function setGuess(v){
+    guess = Math.min(8, Math.max(0, Math.round(v*4)/4));
+    $("gVal").textContent = fmtG(guess);
+    document.querySelectorAll("#gChips button").forEach(c =>
+      c.classList.toggle("on", parseFloat(c.dataset.v) === guess));
+  }
+  $("gMinus").addEventListener("click", () => setGuess(guess - .25));
+  $("gPlus").addEventListener("click", () => setGuess(guess + .25));
+  document.querySelectorAll("#gChips button").forEach(c =>
+    c.addEventListener("click", () => setGuess(parseFloat(c.dataset.v))));
+
+  function pShow(step){
+    ["p-step1","p-step2","p-step3"].forEach((id,i) =>
+      $(id).classList.toggle("hidden", i !== step-1));
+  }
+
+  $("lockGuess").addEventListener("click", () => {
+    lockedGuess = guess;
+    $("lockedShow").textContent = fmtG(lockedGuess) + "%";
+    $("pSteady").textContent = "place the phone, then start";
+    $("pCapPct").textContent = "—";
+    $("pCapArc").setAttribute("stroke-dashoffset", 326.7);
+    pShow(2);
+  });
+  $("pBack").addEventListener("click", () => pShow(1));
+
+  $("pCapture").addEventListener("click", async () => {
+    $("pCapture").disabled = true;
+    $("pSteady").textContent = "capturing — hands off";
+    const res = await capture((p,r) => {
+      $("pCapArc").setAttribute("stroke-dashoffset", 326.7*(1-p));
+      $("pCapPct").textContent = r.slopePct.toFixed(1);
+    });
+    $("pCapture").disabled = false;
+    vib(60);
+    if (res.sd > 0.35){
+      $("pSteady").textContent = `noisy read (±${res.sd.toFixed(2)}) — reseat the phone and recapture`;
+      return;
+    }
+    finishRead(res);
+  });
+
+  async function finishRead(res){
+    const actual = res.slopePct;
+    const err = lockedGuess - actual;
+    $("rGuess").textContent = fmtG(lockedGuess) + "%";
+    $("rActual").textContent = actual.toFixed(1) + "%";
+    const v = $("rVerdict");
+    const a = Math.abs(err);
+    let cls = "err-zero", word = "Dead on. Your feet are calibrated on this one.";
+    if (a >= 0.25 && err > 0){ cls = "err-pos"; word = "Over-read — your feet felt more slope than there is."; }
+    if (a >= 0.25 && err < 0){ cls = "err-neg"; word = "Under-read — there's more slope here than you felt."; }
+    v.innerHTML = `<span class="${cls}"><b>${err>=0?"+":""}${err.toFixed(2)}%</b></span><br>${word}`;
+    pShow(3);
+    await logRead({ t: Date.now(), guess: lockedGuess, actual: +actual.toFixed(2), err: +err.toFixed(2) });
+  }
+
+  $("pNext").addEventListener("click", () => { setGuess(guess); pShow(1); });
+
+  /* ---------- level tab: capture / precision / calibration ---------- */
+  $("lCapture").addEventListener("click", async () => {
+    $("lMsg").textContent = "capturing…";
+    const r = await capture();
+    vib(60);
+    $("lMsg").textContent = `captured: ${r.slopePct.toFixed(2)}% (${r.tiltDeg.toFixed(2)}°) ±${r.sd.toFixed(2)}`;
+  });
+
+  let precisionFirst = null;
+  $("lPrecision").addEventListener("click", async () => {
+    if (!precisionFirst){
+      $("lMsg").textContent = "capturing read 1…";
+      precisionFirst = await capture();
+      vib(60);
+      $("lMsg").textContent = "now rotate the phone 180° in place, then tap Precision again";
+      $("lPrecision").textContent = "Capture read 2";
+    } else {
+      $("lMsg").textContent = "capturing read 2…";
+      const second = await capture();
+      vib([60,80,60]);
+      // rotating 180° flips true tilt components; bias stays put → difference/2 cancels bias
+      const tb = (precisionFirst.b - second.b)/2;
+      const tg = (precisionFirst.g - second.g)/2;
+      const br = tb*RAD, gr = tg*RAD;
+      const gx = Math.sin(gr)*Math.cos(br), gy = -Math.sin(br);
+      const slope = Math.hypot(gx,gy)/Math.abs(Math.cos(br)*Math.cos(gr))*100;
+      $("lMsg").textContent = `precision result: ${slope.toFixed(2)}% (bias-cancelled)`;
+      precisionFirst = null;
+      $("lPrecision").textContent = "Precision ↻180°";
+    }
+  });
+
+  async function loadCal(){
+    const raw = await store.get("fallline-cal");
+    if (raw){ cal = JSON.parse(raw); $("calShow").textContent = `β ${cal.b.toFixed(2)}° · γ ${cal.g.toFixed(2)}°`; }
+  }
+  $("calZero").addEventListener("click", async () => {
+    $("lMsg").textContent = "calibrating…";
+    cal = null;
+    const r = await capture();
+    cal = { b: r.b, g: r.g };
+    await store.set("fallline-cal", JSON.stringify(cal));
+    $("calShow").textContent = `β ${cal.b.toFixed(2)}° · γ ${cal.g.toFixed(2)}°`;
+    $("lMsg").textContent = "zeroed";
+    vib(60);
+  });
+  $("calClear").addEventListener("click", async () => {
+    cal = null; await store.del("fallline-cal");
+    $("calShow").textContent = "none"; $("lMsg").textContent = "calibration cleared";
+  });
+
+  /* ---------- history + stats ---------- */
+  let history = [];
+  async function loadHistory(){
+    const raw = await store.get("fallline-history");
+    if (raw){ try{ history = JSON.parse(raw); }catch(e){ history = []; } }
+  }
+  async function logRead(entry){
+    history.push(entry);
+    if (history.length > 500) history = history.slice(-500);
+    await store.set("fallline-history", JSON.stringify(history));
+  }
+
+  function renderStats(){
+    $("sCount").textContent = history.length;
+    if (!history.length){
+      $("sMae").textContent = "—"; $("sBias").textContent = "—";
+      $("histList").innerHTML = '<p class="note">No reads yet. Run the practice loop and they\'ll land here.</p>';
+      $("errBars").innerHTML = "";
+      return;
+    }
+    const mae = history.reduce((s,x)=>s+Math.abs(x.err),0)/history.length;
+    const bias = history.reduce((s,x)=>s+x.err,0)/history.length;
+    $("sMae").textContent = mae.toFixed(2);
+    $("sBias").textContent = (bias>=0?"+":"") + bias.toFixed(2);
+
+    // distribution bars: −1.5..+1.5 in 0.25 buckets
+    const buckets = new Array(13).fill(0);
+    history.forEach(x => {
+      const i = Math.min(12, Math.max(0, Math.round((x.err+1.5)/0.25)));
+      buckets[i]++;
+    });
+    const mx = Math.max(...buckets, 1);
+    $("errBars").innerHTML = buckets.map((n,i) =>
+      `<div class="bar${i===6?" hot":""}" style="height:${Math.max(4, n/mx*100)}%"></div>`).join("");
+
+    $("histList").innerHTML = history.slice(-20).reverse().map(x => {
+      const d = new Date(x.t);
+      const cls = Math.abs(x.err) < .25 ? "err-zero" : x.err > 0 ? "err-pos" : "err-neg";
+      return `<div class="hist-item">
+        <span>${x.guess.toFixed(2)} → ${x.actual.toFixed(1)}</span>
+        <span class="${cls}">${x.err>=0?"+":""}${x.err.toFixed(2)}</span>
+        <span class="when">${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,"0")}</span>
+      </div>`;
+    }).join("");
+  }
+
+  $("clearData").addEventListener("click", async () => {
+    history = [];
+    await store.del("fallline-history");
+    renderStats();
+  });
+
+  loadCal(); loadHistory();
+})();
+</script>
+</body>
+</html>
